@@ -216,7 +216,7 @@ CREATE TRIGGER update_push_subscriptions_updated_at BEFORE UPDATE ON push_subscr
 CREATE OR REPLACE FUNCTION handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
-    INSERT INTO profiles (user_id, display_name)
+    INSERT INTO public.profiles (user_id, display_name)
     VALUES (NEW.id, NEW.raw_user_meta_data->>'display_name');
     RETURN NEW;
 END;

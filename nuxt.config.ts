@@ -16,6 +16,8 @@ export default defineNuxtConfig({
   css: ['~/assets/css/main.css'],
 
   supabase: {
+    url: process.env.SUPABASE_URL,
+    key: process.env.SUPABASE_KEY,
     redirectOptions: {
       login: '/login',
       callback: '/confirm',
@@ -85,7 +87,10 @@ export default defineNuxtConfig({
   },
 
   runtimeConfig: {
-    // Server-side only (VAPID for Web Push)
+    // Server-side only
+    supabaseUrl: process.env.SUPABASE_URL,
+    supabaseKey: process.env.SUPABASE_KEY,
+    supabaseServiceKey: process.env.SUPABASE_SERVICE_KEY,
     vapidPrivateKey: '',
     vapidSubject: '',
     // Client-side
