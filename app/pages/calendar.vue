@@ -15,6 +15,24 @@ const filters = reactive({
   healthEvents: true,
 })
 
+const healthSubFilters = reactive({
+  illness: true,
+  treatment: true,
+  vaccination: true,
+  milestone: true,
+  appointment: true,
+  other: true,
+})
+
+const healthSubFilterOptions = [
+  { key: 'illness' as const, label: 'Illness', color: 'bg-red-500' },
+  { key: 'treatment' as const, label: 'Treatment', color: 'bg-pink-500' },
+  { key: 'vaccination' as const, label: 'Vaccination', color: 'bg-blue-500' },
+  { key: 'milestone' as const, label: 'Milestone', color: 'bg-purple-500' },
+  { key: 'appointment' as const, label: 'Appointment', color: 'bg-teal-500' },
+  { key: 'other' as const, label: 'Other', color: 'bg-gray-500' },
+]
+
 // Get the calendar days for the current month view
 const calendarDays = computed(() => {
   const year = selectedDate.value.getFullYear()
@@ -102,9 +120,30 @@ const selectDate = (date: Date) => {
 const getEventsForDate = (date: Date) => {
   const dateStr = date.toISOString().split('T')[0]
   return events.value.filter(e => {
+    // Apply health event sub-filters
+    if (e.type === 'health' && !healthSubFilters[e.eventType as keyof typeof healthSubFilters]) {
+      return false
+    }
+    if (e.type === 'health' && e.endDate) {
+      // Multi-day health event: check if date falls within [start_date, end_date]
+      const startStr = new Date(e.date).toISOString().split('T')[0]
+      const endStr = new Date(e.endDate).toISOString().split('T')[0]
+      return dateStr >= startStr && dateStr <= endStr
+    }
     const eventDate = new Date(e.date).toISOString().split('T')[0]
     return eventDate === dateStr
   })
+}
+
+const getEventDayPosition = (event: any, date: Date): 'start' | 'middle' | 'end' | 'single' => {
+  if (!event.endDate) return 'single'
+  const dateStr = date.toISOString().split('T')[0]
+  const startStr = new Date(event.date).toISOString().split('T')[0]
+  const endStr = new Date(event.endDate).toISOString().split('T')[0]
+  if (startStr === endStr) return 'single'
+  if (dateStr === startStr) return 'start'
+  if (dateStr === endStr) return 'end'
+  return 'middle'
 }
 
 const selectedDateEvents = computed(() => {
@@ -155,22 +194,32 @@ const fetchEvents = async () => {
     }
   }
 
-  // Fetch health events
+  // Fetch health events (including multi-day events that overlap with the month)
   if (filters.healthEvents) {
+    const monthStart = startOfMonth.toISOString().split('T')[0]
+    const monthEnd = endOfMonth.toISOString().split('T')[0]
+
+    // Fetch events that start within the month OR span into the month
     const { data: healthEvents } = await supabase
       .from('health_events')
       .select('*')
       .eq('child_id', child.value.id)
-      .gte('start_date', startOfMonth.toISOString().split('T')[0])
-      .lte('start_date', endOfMonth.toISOString().split('T')[0])
+      .lte('start_date', monthEnd)
+      .or(`end_date.gte.${monthStart},end_date.is.null`)
 
     if (healthEvents) {
+      // Filter: events without end_date must start within the month
       healthEvents.forEach(event => {
+        if (!event.end_date) {
+          const eventStart = event.start_date
+          if (eventStart < monthStart || eventStart > monthEnd) return
+        }
         allEvents.push({
           id: event.id,
           type: 'health',
           title: event.title,
           date: event.start_date,
+          endDate: event.end_date,
           eventType: event.type,
           severity: event.severity,
         })
@@ -210,6 +259,8 @@ const getEventTypeColor = (type: string) => {
   switch (type) {
     case 'illness':
       return 'bg-red-500'
+    case 'treatment':
+      return 'bg-pink-500'
     case 'vaccination':
       return 'bg-blue-500'
     case 'milestone':
@@ -225,6 +276,8 @@ const getEventTypeIcon = (type: string) => {
   switch (type) {
     case 'illness':
       return 'i-heroicons-face-frown'
+    case 'treatment':
+      return 'i-heroicons-heart'
     case 'vaccination':
       return 'i-heroicons-shield-check'
     case 'milestone':
@@ -296,6 +349,27 @@ const weekDays = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
         </button>
       </div>
 
+      <!-- Health Event Sub-Filters -->
+      <div v-if="filters.healthEvents" class="flex gap-2 flex-wrap">
+        <button
+          v-for="option in healthSubFilterOptions"
+          :key="option.key"
+          class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all"
+          :class="[
+            healthSubFilters[option.key]
+              ? 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 ring-1 ring-gray-200 dark:ring-gray-700 shadow-sm'
+              : 'text-gray-400 dark:text-gray-500 hover:text-gray-500'
+          ]"
+          @click="healthSubFilters[option.key] = !healthSubFilters[option.key]"
+        >
+          <div
+            class="w-1.5 h-1.5 rounded-full transition-all"
+            :class="healthSubFilters[option.key] ? option.color : 'bg-gray-300'"
+          />
+          {{ option.label }}
+        </button>
+      </div>
+
       <!-- Calendar Card -->
       <div class="bg-white dark:bg-gray-800 rounded-2xl p-4 shadow-sm ring-1 ring-gray-200 dark:ring-gray-700">
         <!-- Month Navigation -->
@@ -354,13 +428,20 @@ const weekDays = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
               <span
                 v-for="(event, i) in getEventsForDate(date).slice(0, 3)"
                 :key="i"
-                class="w-1.5 h-1.5 rounded-full"
+                class="h-1.5 transition-all"
                 :class="[
                   isSelected(date)
                     ? 'bg-white/70'
                     : event.type === 'intake'
                       ? getStatusColor(event.status)
-                      : getEventTypeColor(event.eventType)
+                      : getEventTypeColor(event.eventType),
+                  event.type === 'health' && getEventDayPosition(event, date) === 'middle'
+                    ? 'w-3 rounded-sm opacity-60'
+                    : event.type === 'health' && getEventDayPosition(event, date) === 'start'
+                      ? 'w-2 rounded-l-full'
+                      : event.type === 'health' && getEventDayPosition(event, date) === 'end'
+                        ? 'w-2 rounded-r-full'
+                        : 'w-1.5 rounded-full'
                 ]"
               />
             </div>
@@ -412,11 +493,13 @@ const weekDays = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
                         : 'bg-amber-100 dark:bg-amber-900/30 text-amber-600'
                     : event.eventType === 'illness'
                       ? 'bg-red-100 dark:bg-red-900/30 text-red-600'
-                      : event.eventType === 'vaccination'
-                        ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600'
-                        : event.eventType === 'milestone'
-                          ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-600'
-                          : 'bg-teal-100 dark:bg-teal-900/30 text-teal-600'
+                      : event.eventType === 'treatment'
+                        ? 'bg-pink-100 dark:bg-pink-900/30 text-pink-600'
+                        : event.eventType === 'vaccination'
+                          ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600'
+                          : event.eventType === 'milestone'
+                            ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-600'
+                            : 'bg-teal-100 dark:bg-teal-900/30 text-teal-600'
                 ]"
               >
                 <UIcon
@@ -438,6 +521,9 @@ const weekDays = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
                 </span>
                 <span v-else class="text-sm text-gray-500 dark:text-gray-400 capitalize">
                   {{ event.eventType }}
+                  <span v-if="event.endDate && getEventDayPosition(event, selectedDate) !== 'single'" class="text-xs opacity-70">
+                    ({{ getEventDayPosition(event, selectedDate) === 'start' ? 'started' : getEventDayPosition(event, selectedDate) === 'end' ? 'ended' : 'ongoing' }})
+                  </span>
                 </span>
               </div>
 
@@ -453,7 +539,7 @@ const weekDays = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
               </UBadge>
               <UBadge
                 v-else
-                :color="event.eventType === 'illness' ? 'red' : event.eventType === 'vaccination' ? 'blue' : 'purple'"
+                :color="event.eventType === 'illness' ? 'red' : event.eventType === 'treatment' ? 'pink' : event.eventType === 'vaccination' ? 'blue' : event.eventType === 'appointment' ? 'teal' : 'purple'"
                 variant="soft"
                 size="xs"
                 :ui="{ rounded: 'rounded-full' }"

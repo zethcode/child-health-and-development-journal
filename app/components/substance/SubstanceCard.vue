@@ -126,7 +126,14 @@ const items = [
           </UBadge>
         </div>
 
-        <div class="flex items-center gap-2 text-sm">
+        <p
+          v-if="substance.description"
+          class="text-xs text-gray-500 dark:text-gray-400 mt-0.5"
+        >
+          {{ substance.description }}
+        </p>
+
+        <div class="flex items-center gap-2 text-sm mt-0.5">
           <span class="text-gray-500 dark:text-gray-400 capitalize">
             {{ getTypeLabel(substance.type) }}
           </span>

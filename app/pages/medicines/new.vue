@@ -11,6 +11,7 @@ const form = reactive({
   type: 'medicine' as 'medicine' | 'vitamin' | 'supplement',
   dosage: '',
   unit: 'ml',
+  description: '',
   instructions: '',
 })
 
@@ -51,12 +52,21 @@ const selectedType = computed(() => {
   return typeOptions.find(t => t.value === form.type) || typeOptions[0]
 })
 
+const nameError = computed(() => {
+  if (form.name && form.name.trim().length < 2) return 'Name must be at least 2 characters'
+  return null
+})
+
+const isValid = computed(() => form.name.trim().length >= 2)
+
 const handleSubmit = async () => {
+  if (!isValid.value) return
   const substance = await createSubstance({
     name: form.name,
     type: form.type,
     dosage: form.dosage || null,
     unit: form.dosage ? form.unit : null,
+    description: form.description || null,
     instructions: form.instructions || null,
     is_active: true,
   })
@@ -134,7 +144,7 @@ const handleSubmit = async () => {
         <!-- Name -->
         <UCard :ui="{ body: { padding: 'p-4 sm:p-5' }, ring: 'ring-1 ring-gray-200 dark:ring-gray-700', shadow: 'shadow-sm', rounded: 'rounded-2xl' }">
           <div class="space-y-4">
-            <UFormGroup label="Name" name="name" required>
+            <UFormGroup label="Name" name="name" required :error="nameError">
               <UInput
                 v-model="form.name"
                 placeholder="e.g., Paracetamol, Vitamin D3"
@@ -166,6 +176,15 @@ const handleSubmit = async () => {
               </UFormGroup>
             </div>
 
+            <UFormGroup label="Description" name="description" hint="Optional">
+              <UTextarea
+                v-model="form.description"
+                placeholder="e.g., Reduces fever and relieves pain"
+                :rows="2"
+                :ui="{ rounded: 'rounded-xl' }"
+              />
+            </UFormGroup>
+
             <UFormGroup label="Instructions" name="instructions" hint="Optional">
               <UTextarea
                 v-model="form.instructions"
@@ -193,12 +212,13 @@ const handleSubmit = async () => {
           block
           size="xl"
           :loading="loading"
+          :disabled="!isValid"
           :ui="{
             rounded: 'rounded-xl',
             padding: { xl: 'py-4 px-6' },
             font: 'font-semibold',
           }"
-          class="bg-gradient-to-r from-coral-500 to-orange-500 hover:from-coral-600 hover:to-orange-600 shadow-lg shadow-coral-200 dark:shadow-coral-900/30"
+          class="bg-gradient-to-r from-coral-500 to-orange-500 hover:from-coral-600 hover:to-orange-600 shadow-lg shadow-coral-200 dark:shadow-coral-900/30 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <template #leading>
             <UIcon name="i-heroicons-plus" class="w-5 h-5" />

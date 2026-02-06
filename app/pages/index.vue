@@ -7,10 +7,13 @@ const { child } = useChild()
 const { todayLogs, todayProgress, fetchTodayLogs, markAsTaken, markAsSkipped, loading } = useIntakeLogs()
 const { fetchSubstances, activeSubstances } = useSubstances()
 const { formatAge } = useChildPortfolio()
+const { activeIllnesses, upcomingAppointments, fetchHealthEvents } = useHealthEvents()
+
+const showFeverModal = ref(false)
 
 // Fetch data on mount
 onMounted(async () => {
-  await Promise.all([fetchTodayLogs(), fetchSubstances(true)])
+  await Promise.all([fetchTodayLogs(), fetchSubstances(true), fetchHealthEvents()])
 })
 
 const formatTime = (dateString: string) => {
@@ -76,8 +79,18 @@ const progressPercentage = computed(() => {
       </div>
 
       <!-- Loading State -->
-      <div v-if="loading" class="flex justify-center py-12">
-        <UIcon name="i-heroicons-arrow-path" class="w-8 h-8 text-gray-400 animate-spin" />
+      <div v-if="loading" class="space-y-4">
+        <div class="rounded-2xl bg-gray-200 dark:bg-gray-700 animate-pulse h-40" />
+        <div class="grid grid-cols-2 gap-3">
+          <div class="rounded-2xl bg-gray-200 dark:bg-gray-700 animate-pulse h-20" />
+          <div class="rounded-2xl bg-gray-200 dark:bg-gray-700 animate-pulse h-20" />
+          <div class="rounded-2xl bg-gray-200 dark:bg-gray-700 animate-pulse h-20" />
+          <div class="rounded-2xl bg-gray-200 dark:bg-gray-700 animate-pulse h-20" />
+        </div>
+        <div class="space-y-2">
+          <div class="rounded-xl bg-gray-200 dark:bg-gray-700 animate-pulse h-16" />
+          <div class="rounded-xl bg-gray-200 dark:bg-gray-700 animate-pulse h-16" />
+        </div>
       </div>
 
       <!-- Progress Card -->
@@ -127,6 +140,129 @@ const progressPercentage = computed(() => {
         </div>
       </div>
 
+      <!-- Active Illness Alert -->
+      <div
+        v-if="!loading && activeIllnesses.length > 0"
+        class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-2xl p-4"
+      >
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-red-100 dark:bg-red-900/30 flex items-center justify-center shrink-0">
+            <UIcon name="i-heroicons-exclamation-triangle" class="w-5 h-5 text-red-600 dark:text-red-400" />
+          </div>
+          <div class="flex-1 min-w-0">
+            <p class="font-medium text-red-800 dark:text-red-300 text-sm">Active Illness</p>
+            <p class="text-xs text-red-600 dark:text-red-400">
+              {{ activeIllnesses[0].title }}
+              <span v-if="activeIllnesses.length > 1"> +{{ activeIllnesses.length - 1 }} more</span>
+              — no end date recorded
+            </p>
+          </div>
+          <UButton
+            to="/settings/health-events"
+            variant="soft"
+            color="red"
+            size="xs"
+            :ui="{ rounded: 'rounded-lg' }"
+          >
+            View
+          </UButton>
+        </div>
+      </div>
+
+      <!-- Upcoming Appointment Reminder -->
+      <div
+        v-if="!loading && upcomingAppointments.length > 0"
+        class="bg-teal-50 dark:bg-teal-900/20 border border-teal-200 dark:border-teal-800 rounded-2xl p-4"
+      >
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-teal-100 dark:bg-teal-900/30 flex items-center justify-center shrink-0">
+            <UIcon name="i-heroicons-calendar" class="w-5 h-5 text-teal-600 dark:text-teal-400" />
+          </div>
+          <div class="flex-1 min-w-0">
+            <p class="font-medium text-teal-800 dark:text-teal-300 text-sm">Upcoming Appointment</p>
+            <p class="text-xs text-teal-600 dark:text-teal-400">
+              {{ upcomingAppointments[0].title }} —
+              {{ new Date(upcomingAppointments[0].start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) }}
+            </p>
+          </div>
+          <UButton
+            to="/settings/health-events"
+            variant="soft"
+            color="teal"
+            size="xs"
+            :ui="{ rounded: 'rounded-lg' }"
+          >
+            View
+          </UButton>
+        </div>
+      </div>
+
+      <!-- Quick Actions -->
+      <div v-if="!loading" class="space-y-3">
+        <div class="flex items-center gap-2">
+          <div class="w-8 h-8 rounded-xl bg-coral-100 dark:bg-coral-900/30 flex items-center justify-center">
+            <UIcon name="i-heroicons-bolt" class="w-4 h-4 text-coral-600 dark:text-coral-400" />
+          </div>
+          <h2 class="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
+            Quick Actions
+          </h2>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <NuxtLink
+            to="/medicines/new"
+            class="flex items-center gap-3 p-3.5 bg-white dark:bg-gray-800 rounded-2xl ring-1 ring-gray-200 dark:ring-gray-700 shadow-sm hover:shadow-md transition-all"
+          >
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-400 to-blue-500 flex items-center justify-center shadow-md shadow-blue-200 dark:shadow-blue-900/30">
+              <UIcon name="i-heroicons-plus" class="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <p class="text-sm font-medium text-gray-900 dark:text-white">Add Medicine</p>
+              <p class="text-xs text-gray-500">New substance</p>
+            </div>
+          </NuxtLink>
+
+          <NuxtLink
+            to="/medicines/log"
+            class="flex items-center gap-3 p-3.5 bg-white dark:bg-gray-800 rounded-2xl ring-1 ring-gray-200 dark:ring-gray-700 shadow-sm hover:shadow-md transition-all"
+          >
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-500 flex items-center justify-center shadow-md shadow-emerald-200 dark:shadow-emerald-900/30">
+              <UIcon name="i-heroicons-check-circle" class="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <p class="text-sm font-medium text-gray-900 dark:text-white">Log Dose</p>
+              <p class="text-xs text-gray-500">Manual entry</p>
+            </div>
+          </NuxtLink>
+
+          <button
+            class="flex items-center gap-3 p-3.5 bg-white dark:bg-gray-800 rounded-2xl ring-1 ring-gray-200 dark:ring-gray-700 shadow-sm hover:shadow-md transition-all text-left"
+            @click="showFeverModal = true"
+          >
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-red-400 to-orange-500 flex items-center justify-center shadow-md shadow-red-200 dark:shadow-red-900/30">
+              <UIcon name="i-heroicons-fire" class="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <p class="text-sm font-medium text-gray-900 dark:text-white">Quick Fever</p>
+              <p class="text-xs text-gray-500">Record temp</p>
+            </div>
+          </button>
+
+          <NuxtLink
+            to="/settings/health-events"
+            class="flex items-center gap-3 p-3.5 bg-white dark:bg-gray-800 rounded-2xl ring-1 ring-gray-200 dark:ring-gray-700 shadow-sm hover:shadow-md transition-all"
+          >
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-rose-400 to-pink-500 flex items-center justify-center shadow-md shadow-rose-200 dark:shadow-rose-900/30">
+              <UIcon name="i-heroicons-heart" class="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <p class="text-sm font-medium text-gray-900 dark:text-white">Add Event</p>
+              <p class="text-xs text-gray-500">Health event</p>
+            </div>
+          </NuxtLink>
+        </div>
+      </div>
+
       <!-- Empty State: No medicines -->
       <div
         v-if="!loading && todayLogs.length === 0 && activeSubstances.length === 0"
@@ -136,8 +272,11 @@ const progressPercentage = computed(() => {
           <UIcon name="i-heroicons-beaker" class="w-10 h-10 text-coral-500" />
         </div>
         <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">No medicines yet</h3>
-        <p class="text-gray-500 dark:text-gray-400 mb-6 max-w-xs mx-auto">
+        <p class="text-gray-500 dark:text-gray-400 mb-2 max-w-xs mx-auto">
           Start by adding medicines, vitamins, or supplements to track for {{ child?.name || 'your child' }}.
+        </p>
+        <p class="text-xs text-gray-400 dark:text-gray-500 mb-6 max-w-xs mx-auto">
+          Tip: After adding a medicine, create a schedule to get daily reminders.
         </p>
         <UButton
           to="/medicines/new"
@@ -236,6 +375,14 @@ const progressPercentage = computed(() => {
           class="bg-gradient-to-r from-coral-500 to-orange-500 hover:from-coral-600 hover:to-orange-600 shadow-lg shadow-coral-300 dark:shadow-coral-900/50"
         />
       </div>
+
+      <!-- Quick Add Fever Modal -->
+      <UModal v-model="showFeverModal">
+        <QuickAddFever
+          @close="showFeverModal = false"
+          @saved="fetchHealthEvents()"
+        />
+      </UModal>
     </div>
   </div>
 </template>

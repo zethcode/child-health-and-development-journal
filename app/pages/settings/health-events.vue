@@ -3,17 +3,29 @@ definePageMeta({
   middleware: ['child'],
 })
 
-const supabase = useSupabaseClient()
+const {
+  healthEvents: events,
+  loading,
+  fetchHealthEvents,
+  createHealthEvent,
+  updateHealthEvent,
+  deleteHealthEvent: removeEvent,
+  linkSubstanceToEvent,
+  unlinkSubstanceFromEvent,
+  fetchHealthEventWithSubstances,
+} = useHealthEvents()
 const { child } = useChild()
 const user = useSupabaseUser()
+const { fetchSubstances, activeSubstances } = useSubstances()
 
-const events = ref<any[]>([])
-const loading = ref(true)
 const showModal = ref(false)
 const editingEvent = ref<any>(null)
+const selectedMedicines = ref<string[]>([])
+const eventSubstancesMap = ref<Record<string, any[]>>({})
+const expandedEvents = ref<Set<string>>(new Set())
 
 const form = reactive({
-  type: 'illness' as 'illness' | 'vaccination' | 'milestone' | 'appointment' | 'other',
+  type: 'illness' as 'illness' | 'vaccination' | 'milestone' | 'appointment' | 'treatment' | 'other',
   title: '',
   description: '',
   start_date: new Date().toISOString().split('T')[0],
@@ -23,11 +35,29 @@ const form = reactive({
 
 const typeOptions = [
   { label: 'Illness', value: 'illness', icon: 'i-heroicons-face-frown', gradient: 'from-red-400 to-rose-500' },
+  { label: 'Treatment', value: 'treatment', icon: 'i-heroicons-heart', gradient: 'from-pink-400 to-pink-500' },
   { label: 'Vaccination', value: 'vaccination', icon: 'i-heroicons-shield-check', gradient: 'from-blue-400 to-blue-500' },
   { label: 'Milestone', value: 'milestone', icon: 'i-heroicons-star', gradient: 'from-amber-400 to-orange-500' },
   { label: 'Appointment', value: 'appointment', icon: 'i-heroicons-calendar', gradient: 'from-teal-400 to-teal-500' },
   { label: 'Other', value: 'other', icon: 'i-heroicons-document-text', gradient: 'from-gray-400 to-gray-500' },
 ]
+
+const showMedicineSelect = computed(() => form.type === 'illness' || form.type === 'treatment')
+
+const toggleExpanded = async (eventId: string) => {
+  if (expandedEvents.value.has(eventId)) {
+    expandedEvents.value.delete(eventId)
+  } else {
+    // Fetch substances for this event if not already loaded
+    if (!eventSubstancesMap.value[eventId]) {
+      const eventWithSubs = await fetchHealthEventWithSubstances(eventId)
+      if (eventWithSubs) {
+        eventSubstancesMap.value[eventId] = eventWithSubs.health_event_substances || []
+      }
+    }
+    expandedEvents.value.add(eventId)
+  }
+}
 
 const severityOptions = [
   { label: 'None', value: null },
@@ -36,21 +66,23 @@ const severityOptions = [
   { label: 'High', value: 'high' },
 ]
 
-const fetchEvents = async () => {
-  if (!child.value) return
+onMounted(async () => {
+  await Promise.all([fetchHealthEvents(), fetchSubstances(true)])
+})
 
-  loading.value = true
-  const { data } = await supabase
-    .from('health_events')
-    .select('*')
-    .eq('child_id', child.value.id)
-    .order('start_date', { ascending: false })
+const titleError = computed(() => {
+  if (form.title && form.title.trim().length < 2) return 'Title must be at least 2 characters'
+  return null
+})
 
-  events.value = data || []
-  loading.value = false
-}
+const dateError = computed(() => {
+  if (form.end_date && form.start_date && form.end_date < form.start_date) {
+    return 'End date must be after start date'
+  }
+  return null
+})
 
-onMounted(fetchEvents)
+const isFormValid = computed(() => form.title.trim().length >= 2 && !dateError.value)
 
 const resetForm = () => {
   form.type = 'illness'
@@ -59,6 +91,7 @@ const resetForm = () => {
   form.start_date = new Date().toISOString().split('T')[0]
   form.end_date = ''
   form.severity = null
+  selectedMedicines.value = []
   editingEvent.value = null
 }
 
@@ -67,7 +100,7 @@ const openNewModal = () => {
   showModal.value = true
 }
 
-const openEditModal = (event: any) => {
+const openEditModal = async (event: any) => {
   editingEvent.value = event
   form.type = event.type
   form.title = event.title
@@ -75,50 +108,81 @@ const openEditModal = (event: any) => {
   form.start_date = event.start_date
   form.end_date = event.end_date || ''
   form.severity = event.severity
+  // Load linked medicines for editing
+  selectedMedicines.value = []
+  if (event.type === 'illness' || event.type === 'treatment') {
+    const eventWithSubs = await fetchHealthEventWithSubstances(event.id)
+    if (eventWithSubs?.health_event_substances) {
+      selectedMedicines.value = eventWithSubs.health_event_substances.map((s: any) => s.substance_id)
+    }
+  }
   showModal.value = true
 }
 
 const handleSubmit = async () => {
-  if (!user.value || !child.value) return
+  if (!user.value || !child.value || !isFormValid.value) return
 
   const eventData = {
-    user_id: user.value.id,
-    child_id: child.value.id,
     type: form.type,
     title: form.title,
     description: form.description || null,
     start_date: form.start_date,
     end_date: form.end_date || null,
-    severity: form.severity,
+    severity: form.type === 'illness' ? form.severity : null,
   }
 
+  let eventId: string | null = null
+
   if (editingEvent.value) {
-    await supabase
-      .from('health_events')
-      .update(eventData)
-      .eq('id', editingEvent.value.id)
+    const result = await updateHealthEvent(editingEvent.value.id, eventData)
+    eventId = result?.id || editingEvent.value.id
   } else {
-    await supabase.from('health_events').insert(eventData)
+    const result = await createHealthEvent(eventData)
+    eventId = result?.id || null
+  }
+
+  // Handle medicine linking for illness/treatment types
+  if (eventId && (form.type === 'illness' || form.type === 'treatment')) {
+    // Get current links
+    const currentEvent = await fetchHealthEventWithSubstances(eventId)
+    const currentLinks = currentEvent?.health_event_substances?.map((s: any) => s.substance_id) || []
+
+    // Remove unlinked medicines
+    for (const substanceId of currentLinks) {
+      if (!selectedMedicines.value.includes(substanceId)) {
+        await unlinkSubstanceFromEvent(eventId, substanceId)
+      }
+    }
+
+    // Add new links
+    for (const substanceId of selectedMedicines.value) {
+      if (!currentLinks.includes(substanceId)) {
+        await linkSubstanceToEvent(eventId, substanceId)
+      }
+    }
+
+    // Update cache
+    delete eventSubstancesMap.value[eventId]
   }
 
   showModal.value = false
   resetForm()
-  fetchEvents()
 }
 
 const deleteEvent = async (id: string) => {
-  await supabase.from('health_events').delete().eq('id', id)
-  fetchEvents()
+  await removeEvent(id)
 }
 
 const getTypeConfig = (type: string) => {
-  return typeOptions.find(t => t.value === type) || typeOptions[4]
+  return typeOptions.find(t => t.value === type) || typeOptions[typeOptions.length - 1]
 }
 
 const getTypeShadow = (type: string) => {
   switch (type) {
     case 'illness':
       return 'shadow-red-200 dark:shadow-red-900/30'
+    case 'treatment':
+      return 'shadow-pink-200 dark:shadow-pink-900/30'
     case 'vaccination':
       return 'shadow-blue-200 dark:shadow-blue-900/30'
     case 'milestone':
@@ -193,8 +257,17 @@ const selectedTypeConfig = computed(() => getTypeConfig(form.type))
       </div>
 
       <!-- Loading -->
-      <div v-if="loading" class="flex justify-center py-12">
-        <UIcon name="i-heroicons-arrow-path" class="w-8 h-8 animate-spin text-gray-400" />
+      <div v-if="loading" class="space-y-3">
+        <div v-for="i in 3" :key="i" class="bg-white dark:bg-gray-800 rounded-2xl p-4 ring-1 ring-gray-200 dark:ring-gray-700">
+          <div class="flex items-start gap-3">
+            <div class="w-12 h-12 rounded-xl bg-gray-200 dark:bg-gray-700 animate-pulse" />
+            <div class="flex-1 space-y-2">
+              <div class="h-4 bg-gray-200 dark:bg-gray-700 rounded animate-pulse w-3/4" />
+              <div class="h-3 bg-gray-200 dark:bg-gray-700 rounded animate-pulse w-1/2" />
+              <div class="h-3 bg-gray-200 dark:bg-gray-700 rounded animate-pulse w-2/3" />
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Empty State -->
@@ -265,6 +338,39 @@ const selectedTypeConfig = computed(() => getTypeConfig(form.type))
               <p v-if="event.description" class="text-sm text-gray-500 dark:text-gray-400 line-clamp-2">
                 {{ event.description }}
               </p>
+
+              <!-- Linked medicines toggle -->
+              <button
+                v-if="event.type === 'illness' || event.type === 'treatment'"
+                type="button"
+                class="flex items-center gap-1 mt-1.5 text-xs text-pink-600 dark:text-pink-400 hover:text-pink-700"
+                @click.stop="toggleExpanded(event.id)"
+              >
+                <UIcon name="i-heroicons-link" class="w-3 h-3" />
+                <span>Medicines</span>
+                <UIcon
+                  :name="expandedEvents.has(event.id) ? 'i-heroicons-chevron-up' : 'i-heroicons-chevron-down'"
+                  class="w-3 h-3"
+                />
+              </button>
+
+              <!-- Expanded linked medicines -->
+              <div v-if="expandedEvents.has(event.id) && eventSubstancesMap[event.id]" class="mt-1.5 flex flex-wrap gap-1">
+                <UBadge
+                  v-for="link in eventSubstancesMap[event.id]"
+                  :key="link.id"
+                  color="pink"
+                  variant="soft"
+                  size="xs"
+                  :ui="{ rounded: 'rounded-full' }"
+                >
+                  {{ link.substance?.name || 'Unknown' }}
+                  <span v-if="link.dosage_override" class="ml-0.5 opacity-70">{{ link.dosage_override }}</span>
+                </UBadge>
+                <span v-if="eventSubstancesMap[event.id].length === 0" class="text-xs text-gray-400">
+                  No medicines linked
+                </span>
+              </div>
             </div>
 
             <!-- Menu -->
@@ -308,7 +414,7 @@ const selectedTypeConfig = computed(() => getTypeConfig(form.type))
             <!-- Type Selection -->
             <div class="space-y-2">
               <label class="text-sm font-medium text-gray-700 dark:text-gray-300">Type</label>
-              <div class="grid grid-cols-5 gap-2">
+              <div class="grid grid-cols-3 gap-2">
                 <button
                   v-for="type in typeOptions"
                   :key="type.value"
@@ -332,7 +438,7 @@ const selectedTypeConfig = computed(() => getTypeConfig(form.type))
               </div>
             </div>
 
-            <UFormGroup label="Title" name="title" required>
+            <UFormGroup label="Title" name="title" required :error="titleError">
               <UInput
                 v-model="form.title"
                 placeholder="e.g., Fever, MMR vaccine"
@@ -353,7 +459,7 @@ const selectedTypeConfig = computed(() => getTypeConfig(form.type))
                 />
               </UFormGroup>
 
-              <UFormGroup label="End Date" name="end_date" hint="Optional">
+              <UFormGroup label="End Date" name="end_date" hint="Optional" :error="dateError">
                 <UInput
                   v-model="form.end_date"
                   type="date"
@@ -363,7 +469,7 @@ const selectedTypeConfig = computed(() => getTypeConfig(form.type))
               </UFormGroup>
             </div>
 
-            <UFormGroup v-if="form.type === 'illness'" label="Severity" name="severity">
+            <UFormGroup v-if="form.type === 'illness' || form.type === 'treatment'" label="Severity" name="severity">
               <div class="grid grid-cols-4 gap-2">
                 <button
                   v-for="option in severityOptions"
@@ -381,6 +487,39 @@ const selectedTypeConfig = computed(() => getTypeConfig(form.type))
                 </button>
               </div>
             </UFormGroup>
+
+            <!-- Medicine Linking (for illness and treatment types) -->
+            <div v-if="showMedicineSelect && activeSubstances.length > 0" class="space-y-2">
+              <label class="text-sm font-medium text-gray-700 dark:text-gray-300">Link Medicines</label>
+              <div class="space-y-1.5 max-h-36 overflow-y-auto">
+                <label
+                  v-for="substance in activeSubstances"
+                  :key="substance.id"
+                  class="flex items-center gap-2.5 p-2 rounded-xl cursor-pointer transition-all"
+                  :class="[
+                    selectedMedicines.includes(substance.id)
+                      ? 'bg-pink-50 dark:bg-pink-900/20 ring-1 ring-pink-200 dark:ring-pink-800'
+                      : 'hover:bg-gray-50 dark:hover:bg-gray-700/50'
+                  ]"
+                >
+                  <input
+                    type="checkbox"
+                    :value="substance.id"
+                    v-model="selectedMedicines"
+                    class="rounded border-gray-300 text-pink-500 focus:ring-pink-500"
+                  />
+                  <div class="flex-1 min-w-0">
+                    <span class="text-sm font-medium text-gray-900 dark:text-white">{{ substance.name }}</span>
+                    <span v-if="substance.dosage" class="text-xs text-gray-500 ml-1">
+                      {{ substance.dosage }}{{ substance.unit }}
+                    </span>
+                  </div>
+                </label>
+              </div>
+              <p v-if="selectedMedicines.length > 0" class="text-xs text-gray-500">
+                {{ selectedMedicines.length }} medicine{{ selectedMedicines.length !== 1 ? 's' : '' }} linked
+              </p>
+            </div>
 
             <UFormGroup label="Notes" name="description" hint="Optional">
               <UTextarea
@@ -401,8 +540,9 @@ const selectedTypeConfig = computed(() => getTypeConfig(form.type))
               </UButton>
               <UButton
                 type="submit"
+                :disabled="!isFormValid"
                 :ui="{ rounded: 'rounded-xl' }"
-                class="bg-gradient-to-r from-coral-500 to-orange-500 hover:from-coral-600 hover:to-orange-600"
+                class="bg-gradient-to-r from-coral-500 to-orange-500 hover:from-coral-600 hover:to-orange-600 disabled:opacity-50"
               >
                 {{ editingEvent ? 'Save Changes' : 'Add Event' }}
               </UButton>

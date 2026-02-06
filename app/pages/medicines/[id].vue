@@ -17,6 +17,7 @@ const form = reactive({
   type: 'medicine' as 'medicine' | 'vitamin' | 'supplement',
   dosage: '',
   unit: 'ml',
+  description: '',
   instructions: '',
   is_active: true,
 })
@@ -55,6 +56,13 @@ const selectedType = computed(() => {
   return typeOptions.find(t => t.value === form.type) || typeOptions[0]
 })
 
+const nameError = computed(() => {
+  if (form.name && form.name.trim().length < 2) return 'Name must be at least 2 characters'
+  return null
+})
+
+const isValid = computed(() => form.name.trim().length >= 2)
+
 onMounted(async () => {
   const { data } = await supabase
     .from('substances')
@@ -68,6 +76,7 @@ onMounted(async () => {
     form.type = data.type
     form.dosage = data.dosage || ''
     form.unit = data.unit || 'ml'
+    form.description = data.description || ''
     form.instructions = data.instructions || ''
     form.is_active = data.is_active
   }
@@ -76,11 +85,13 @@ onMounted(async () => {
 })
 
 const handleSubmit = async () => {
+  if (!isValid.value) return
   const result = await updateSubstance(substanceId, {
     name: form.name,
     type: form.type,
     dosage: form.dosage || null,
     unit: form.dosage ? form.unit : null,
+    description: form.description || null,
     instructions: form.instructions || null,
     is_active: form.is_active,
   })
@@ -195,6 +206,15 @@ const handleSubmit = async () => {
                 />
               </UFormGroup>
             </div>
+
+            <UFormGroup label="Description" name="description" hint="Optional">
+              <UTextarea
+                v-model="form.description"
+                placeholder="e.g., Reduces fever and relieves pain"
+                :rows="2"
+                :ui="{ rounded: 'rounded-xl' }"
+              />
+            </UFormGroup>
 
             <UFormGroup label="Instructions" name="instructions" hint="Optional">
               <UTextarea

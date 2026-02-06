@@ -5,6 +5,8 @@ definePageMeta({
 
 const { substances, substancesByType, fetchSubstances, loading, toggleActive, deleteSubstance } = useSubstances()
 
+const searchQuery = ref('')
+
 onMounted(() => {
   fetchSubstances()
 })
@@ -50,7 +52,7 @@ const tabs = [
   },
 ]
 
-const filteredSubstances = computed(() => {
+const tabFilteredSubstances = computed(() => {
   switch (activeTab.value) {
     case 1:
       return substancesByType.value.medicine
@@ -61,6 +63,16 @@ const filteredSubstances = computed(() => {
     default:
       return substances.value
   }
+})
+
+const filteredSubstances = computed(() => {
+  if (!searchQuery.value.trim()) return tabFilteredSubstances.value
+  const query = searchQuery.value.toLowerCase()
+  return tabFilteredSubstances.value.filter(s =>
+    s.name.toLowerCase().includes(query) ||
+    (s.description && s.description.toLowerCase().includes(query)) ||
+    (s.instructions && s.instructions.toLowerCase().includes(query))
+  )
 })
 
 const emptyMessages = [
@@ -127,9 +139,39 @@ const emptyMessages = [
         </button>
       </div>
 
+      <!-- Search Bar -->
+      <div class="relative">
+        <UInput
+          v-model="searchQuery"
+          placeholder="Search by name, description, or instructions..."
+          icon="i-heroicons-magnifying-glass"
+          size="lg"
+          :ui="{ rounded: 'rounded-xl', icon: { trailing: { pointer: '' } } }"
+        >
+          <template v-if="searchQuery" #trailing>
+            <UButton
+              icon="i-heroicons-x-mark"
+              variant="ghost"
+              color="gray"
+              size="xs"
+              :padded="false"
+              @click="searchQuery = ''"
+            />
+          </template>
+        </UInput>
+      </div>
+
       <!-- Loading -->
-      <div v-if="loading" class="flex justify-center py-12">
-        <UIcon name="i-heroicons-arrow-path" class="w-8 h-8 text-gray-400 animate-spin" />
+      <div v-if="loading" class="space-y-3">
+        <div v-for="i in 3" :key="i" class="bg-white dark:bg-gray-800 rounded-2xl p-4 ring-1 ring-gray-200 dark:ring-gray-700">
+          <div class="flex items-start gap-3">
+            <div class="w-12 h-12 rounded-xl bg-gray-200 dark:bg-gray-700 animate-pulse" />
+            <div class="flex-1 space-y-2">
+              <div class="h-4 bg-gray-200 dark:bg-gray-700 rounded animate-pulse w-2/3" />
+              <div class="h-3 bg-gray-200 dark:bg-gray-700 rounded animate-pulse w-1/3" />
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Substances List -->
@@ -146,19 +188,27 @@ const emptyMessages = [
       <!-- Empty State -->
       <div v-else class="text-center py-12">
         <div class="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
-          <UIcon :name="tabs[activeTab].icon" class="w-8 h-8 text-gray-400" />
+          <UIcon :name="searchQuery ? 'i-heroicons-magnifying-glass' : tabs[activeTab].icon" class="w-8 h-8 text-gray-400" />
         </div>
-        <p class="text-gray-500 dark:text-gray-400 mb-4">{{ emptyMessages[activeTab] }}</p>
-        <UButton
-          to="/medicines/new"
-          variant="soft"
-          :ui="{ rounded: 'rounded-xl' }"
-        >
-          <template #leading>
-            <UIcon name="i-heroicons-plus" class="w-4 h-4" />
-          </template>
-          Add {{ activeTab === 0 ? 'Medicine' : tabs[activeTab].label.slice(0, -1) }}
-        </UButton>
+        <p v-if="searchQuery" class="text-gray-500 dark:text-gray-400 mb-4">
+          No results for "{{ searchQuery }}"
+        </p>
+        <template v-else>
+          <p class="text-gray-500 dark:text-gray-400 mb-2">{{ emptyMessages[activeTab] }}</p>
+          <p class="text-xs text-gray-400 dark:text-gray-500 mb-4">
+            Add medicines, vitamins, or supplements to start tracking.
+          </p>
+          <UButton
+            to="/medicines/new"
+            variant="soft"
+            :ui="{ rounded: 'rounded-xl' }"
+          >
+            <template #leading>
+              <UIcon name="i-heroicons-plus" class="w-4 h-4" />
+            </template>
+            Add {{ activeTab === 0 ? 'Medicine' : tabs[activeTab].label.slice(0, -1) }}
+          </UButton>
+        </template>
       </div>
 
       <!-- Delete Confirmation Modal -->

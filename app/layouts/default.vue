@@ -5,6 +5,7 @@ const navigation = [
   { name: 'Today', to: '/', icon: 'i-heroicons-home', activeIcon: 'i-heroicons-home-solid' },
   { name: 'Calendar', to: '/calendar', icon: 'i-heroicons-calendar', activeIcon: 'i-heroicons-calendar-solid' },
   { name: 'Medicines', to: '/medicines', icon: 'i-heroicons-beaker', activeIcon: 'i-heroicons-beaker-solid' },
+  { name: 'Schedules', to: '/schedules', icon: 'i-heroicons-clock', activeIcon: 'i-heroicons-clock-solid' },
   { name: 'Settings', to: '/settings', icon: 'i-heroicons-cog-6-tooth', activeIcon: 'i-heroicons-cog-6-tooth-solid' },
 ]
 
@@ -58,7 +59,7 @@ const isActive = (item: typeof navigation[0]) => {
               :class="{ 'scale-110': isActive(item) }"
             />
           </div>
-          <span class="text-[10px] font-medium mt-0.5">{{ item.name }}</span>
+          <span class="text-[9px] font-medium mt-0.5">{{ item.name }}</span>
         </NuxtLink>
       </div>
     </nav>
