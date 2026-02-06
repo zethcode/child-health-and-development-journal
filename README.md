@@ -1,4 +1,4 @@
-# Child Health & Development Journal
+# 👶 Child Health & Development Journal
 
 A mobile-first Progressive Web App for parents to track their child's medicines, health events, and developmental milestones — all in one place.
 
@@ -14,49 +14,49 @@ Managing a child's daily medications, vitamins, and health history can be overwh
 
 ## Features
 
-### Medicine & Supplement Tracking
+### 💊 Medicine & Supplement Tracking
 - Add medicines, vitamins, and supplements with dosage, unit, description, and instructions
 - Search and filter by type (medicine / vitamin / supplement)
 - Toggle active/inactive status
 
-### Dose Scheduling & Logging
+### ⏰ Dose Scheduling & Logging
 - Create recurring daily schedules with specific times and days of the week
 - Automatic intake log generation from schedules
 - Daily progress dashboard showing taken, skipped, and pending doses
 - Manual dose logging for as-needed medications
 
-### Health Events
+### 🩺 Health Events
 - Record illnesses, vaccinations, milestones, appointments, and treatments
 - Link medicines to illness and treatment events
 - Track severity levels and date ranges
 - Multi-day events displayed across calendar dates
 - Structured fever recording with temperature, medication taken, and auto-severity
 
-### Calendar View
+### 📅 Calendar View
 - Monthly calendar with color-coded event indicators
 - Multi-day illness/event spanning with visual start/middle/end markers
 - Filter by intakes and health event sub-types
 - Detailed event list for selected date
 
-### Child Portfolio
+### 📋 Child Portfolio
 - Profile with birth date, measurements (height, weight, head circumference)
 - Blood type, allergies, and medical conditions
 - Automatic change log tracking all profile updates over time
 - Age calculation displayed throughout the app
 
-### Today Page
+### 🏠 Today Page
 - Daily greeting with child's name and age
 - Progress card with percentage and dose breakdown
 - Quick actions: Add Medicine, Log Dose, Quick Fever, Add Event
 - Active illness alerts and upcoming appointment reminders
 
-### Additional
+### ✨ Additional
 - Push notifications via Web Push API
 - PWA — installable on mobile home screen
 - Dark mode support
 - Responsive design optimized for mobile
 
-## Tech Stack
+## 🛠 Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
@@ -68,7 +68,7 @@ Managing a child's daily medications, vitamins, and health history can be overwh
 | PWA | [@vite-pwa/nuxt](https://vite-pwa-org.netlify.app/frameworks/nuxt) |
 | Testing | [Playwright](https://playwright.dev) (E2E) |
 
-## Getting Started
+## 🚀 Getting Started
 
 ### Prerequisites
 
@@ -107,7 +107,7 @@ pnpm dev
 | `pnpm test` | Run Playwright E2E tests |
 | `pnpm test:ui` | Run tests with Playwright UI |
 
-## Project Structure
+## 📁 Project Structure
 
 ```
 app/
@@ -125,7 +125,7 @@ supabase/
 public/                  # Static assets & PWA icons
 ```
 
-## Database
+## 🗄 Database
 
 Six migrations build the complete schema:
 
