@@ -72,6 +72,7 @@ export default defineNuxtConfig({
   },
 
   app: {
+    baseURL: '/child-health-and-development-journal', // set the base path for the application
     head: {
       title: 'Child Health Journal',
       meta: [
