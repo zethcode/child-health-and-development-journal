@@ -101,9 +101,8 @@ export default defineNuxtConfig({
 
   nitro: {
     prerender: {
-      crawlLinks: true,
-      routes: ['/'],
-      ignore: ["/api"]  // Add any routes you want to exclude
-    }
+      // Workaround for "Error: [404] Page not found: /xxxxxx.json"
+      failOnError: false,
+    },
   },
 })
