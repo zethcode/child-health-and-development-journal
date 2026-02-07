@@ -98,4 +98,12 @@ export default defineNuxtConfig({
       vapidPublicKey: '',
     },
   },
+
+  nitro: {
+    prerender: {
+      crawlLinks: true,
+      routes: ['/'],
+      ignore: ["/api"]  // Add any routes you want to exclude
+    }
+  },
 })
